@@ -1,28 +1,45 @@
-import struct
+# Converts a sequence of bytes into an integer using little-endian byte order.
+# For example, le(b'\x01\x00') returns 1, and le(b'\x01\x02') returns 513.
+def le(bs):
+    n = 0
+    for i, b in enumerate(bs):
+        # Shift each byte to its correct position based on little-endian order
+        n += b << (i * 8)
+    return n
 
-# def read_bmp(filename):
+
+# Read the entire binary content of the BMP file
 with open("teapot.bmp", "rb") as f:
-    header = f.read(14)  # File header (14 bytes)
-    info = f.read(40)  # Info header (40 bytes)
+    data = f.read()
 
-    # Unpack width, height, and bit depth
-    width, height, planes, bpp = struct.unpack("<iiHH", info[4:16])
-    pixel_offset = struct.unpack("<I", header[10:14])[0]
+# Parse BMP metadata:
+# - 'offset' is where the pixel data begins in the file (usually 54 bytes for standard BMPs)
+# - 'width' and 'height' are the dimensions of the image in pixels
+offset = le(data[10:14])
+width = le(data[18:22])
+height = le(data[22:26])  # height is unused but parsed anyway
 
-    f.seek(pixel_offset)
-    row_size = (width * 3 + 3) & ~3
-    pixels = []
+# Prepare a list to hold rotated pixel data
+pixels = []
 
-    for y in range(height):
-        row = f.read(row_size)
-        pixels.append([row[i : i + 3] for i in range(0, width * 3, 3)])
+# Perform a 90-degree clockwise rotation of the image
+# Traverse each pixel in the rotated image (target_x, target_y)
+for target_y in range(width):
+    for target_x in range(width):
+        # Map each (target_x, target_y) to its original source location
+        source_y = target_x
+        source_x = width - target_y - 1
 
-rotated_pixels = []
-for x in range(width):
-    new_row = []
-    for y in reversed(range(height)):
-        new_row.append(pixels[y][x])
-    rotated_pixels.append(new_row)
+        # Calculate the byte index of the source pixel in the original data
+        # Each pixel takes 3 bytes (RGB), and pixels are stored in row-major order
+        n = offset + 3 * (source_y * width + source_x)
 
+        # Extract the RGB values for that pixel and append to the new pixel list
+        pixels.append(data[n : n + 3])
 
-print(rotated_pixels)
+# Write the rotated image to a new BMP file
+with open("rotate.bmp", "wb") as f:
+    # Copy the original BMP header up to the start of pixel data
+    f.write(data[:offset])
+    # Write the rotated pixel data
+    f.write(b"".join(pixels))
